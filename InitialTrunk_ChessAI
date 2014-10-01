@@ -1,0 +1,201 @@
+#!/usr/bin/env python
+
+#########################################################################
+# CPSC 481: Assignment 1
+# Date: 9/22/14
+# Authors: Sorasit Wanichpan (ADD YOUR NAMES)
+# Changelog:
+# 9/22/14 (Sorasit) -- Added ASCII Chessboard (Visual Representation)
+#                   -- Added King valid movement rules
+#                   -- Added Rook valid movement rules
+# 9/23/14 (Sorasit) -- Integrated the Knight sample from easyAI with Chess 
+#                   -- Added an uncomfortable amount of comments
+# 9/26/14 (Stetzko) -- Added DictTT for transposition tables to speed it up
+#                   -- table = DictTT() to assign the transpostion tables
+#                   -- Changed the ai_algo = Negamax(11) to 
+#                      ai_algo = Negamax(2, tt = table) to speed up the game
+#                      the 2 represents how many moves it will check ahead and
+#                      for some reason if you go higher than 2 it will not work.
+#                   -- In the possible moves method I added a comment that will
+#                      help us better understand our logic on the AI
+#                   -- Also added the other two positions just for the output of
+#                      the board
+#
+# Todo (This week): 
+#     -- Add the Rook object (currently King is the only thing working)
+#     -- Add the Rook check movement (If Rook runs into the same lane as the king)
+#    
+#
+#      Actually take the lessons learned here and make our own source
+#
+#########################################################################
+
+
+import numpy as np
+from easyAI import TwoPlayersGame, AI_Player, Negamax, DictTT
+
+# Valid movement rules
+# Directions in which a piece can move on the game space
+# Note: 0 -> 7 Index
+# All valid moves, access array[0] and [1] respectively for [X,Y]
+
+#-------------------------------------------------------------------------
+# King Movement 
+# Coordinates on the 2D gamespace 
+#------------------------------------------------------------------------- 
+#                  [0,1]            
+#           [-1,1]       [1,1]
+#      [-1,0]        K       [1,0]   
+#           [-1,-1]     [1,-1] 
+#                  [0,-1]
+
+KINGD = list(map(np.array, [[1, 0], [1, -1], [0, -1], [-1, -1],
+                            [-1, 0], [-1, 1], [0, 1], [1, 1]]))
+
+#------------------------------------------------------------------------- 
+# Rook Movement 
+# Coordinates on the 2D gamespace
+#------------------------------------------------------------------------- 
+#                  [0,7]            
+#
+#       [-7,0]       R       [7,0]   
+#
+#                  [0,-7]
+
+ROOKD = list(map(np.array, [[3,0], [-3,0] ,[-3,0], [0,3]]))
+
+
+# functions to convert "D8" into (3,7) and back...
+pos2string = lambda ab: "ABCDEFGH"[ab[0]] + str(ab[1] + 1)
+string2pos = lambda s: np.array(["ABCDEFGH".index(s[0]), int(s[1])-1])
+table = DictTT()
+
+
+### Note this is a derivative of the Knight example given in the easyAI module
+### Knight is replaced with the king, with the respective valid movement rules
+### This is going to be the framework in which where we should build upon -- Sorasit (9/23)
+
+class Chess(TwoPlayersGame):
+    """
+    Each player has a chess piece (king) that can move forward one pace in any direction on a chessboard.
+    Each turn the player moves the king to any tile that isn't occupied.
+    """
+
+    # Intialization of main elements
+    # PLEASE READ THE EASYAI DOCUMENTATION FIRST
+    def __init__(self, players, board_size = (8, 8)):
+        self.players = players
+        self.board_size = board_size
+        self.board = np.zeros(board_size, dtype = int)
+        self.board[0, 0] = 2   # This represents the white rooks posititon initially
+        self.board[0, 3] = 1   # This represents the white kings position initially
+        self.board[7, 7] = 2  # This represents the black Kings position initially
+        self.board[7, 3] = 1
+        #self.board[board_size[0] - 1, board_size[1] - 1] = 3
+        #self.board[board_size[0] - 1, board_size[1] - 1] = 4  # This represents the black Rooks position initially
+        players[0].pos = np.array([0, 0])
+        players[1].pos = np.array([board_size[0] - 1, board_size[1]-1])
+        self.nplayer = 1 # player 1 starts.
+
+    def ttentry(self):
+        return str(self.board)
+
+    def possible_moves(self):
+        # Whose turn is it?
+        # Define each color's "rules"
+        # Example: if player 1 = black, then we can define valid moves for each chess piece
+        # or to determine if the King is in Check.
+        # nplayer: Which player is currently playing
+
+        # So if you look at the if and elif statements our logic is flawed because player one will only ever have a King (KINGD)
+        # and it will never check the rooks (ROOKD) possible movements i.e. endings = [self.player.pos + d for d in KINGD]. Also it is the same if it is 
+        # player two only it will only check for all possible rook (ROOKD) positions i.e. endings = [self.player.pos + d for d in ROOKD]. Somehow 
+        # we need to incorporate them both.
+        if self.nplayer == 1:
+            endings = [self.player.pos + d for d in KINGD] # Check all possible movement based upon the piece's current location
+            return [pos2string(e) for e in endings # Check all the possible moves (endings), determine if they are valid (Not blocked, within the board)
+                    if (e[0] >= 0) and (e[1] >= 0) and # Inside board?
+                       (e[0] < self.board_size[0]) and # Inside board?
+                       (e[1] < self.board_size[1]) and # Inside board?
+                       self.board[e[0], e[1]] == 0] # Not blocked by any piece
+                       #print(endings)
+                       ### We need to add a check logic -- Sorasit (9/23)
+        elif self.nplayer == 2:
+            endings = [self.player.pos + d for d in ROOKD] # Check all possible movement based upon the piece's current location
+            return [pos2string(e) for e in endings # Check all the possible moves (endings), determine if they are valid (Not blocked, within the board)
+                                                   # Convert the X, Y coordinates into algebraic string (i.e. D4)
+                    if (e[0] >= 0) and (e[1] >= 0) and # Inside board?
+                       (e[0] < self.board_size[0]) and # Inside board?
+                       (e[1] < self.board_size[1]) and # Inside board?
+                       self.board[e[0], e[1]] == 0] # Not blocked by any piece
+                       #print(endings)
+
+                       ### We need to add a check logic -- Sorasit (9/23)
+        #print(endings)
+    def make_move(self, pos):
+        if self.nplayer == 1:
+            # After negmax finds the "best" choice, make the move
+            pi, pj = self.player.pos # Gets the player X,Y coordinates on the board
+            self.board[pi, pj] = 0 # Changed from 3 to 0
+                                   # 0 means, no piece is currently occupying that space
+            self.player.pos = string2pos(pos) # Gets the string (AlgoNotation) and covernts it into X,Y to change piece position
+            pi, pj = self.player.pos                # Get the piece's current position
+            self.board[pi, pj] = self.nplayer       # Place it on the ASCII board
+
+           ### We need to add a check logic -- Sorasit (9/23)
+
+        elif self.nplayer == 2:
+            # After negmax finds the "best" choice, make the move
+            pi, pj = self.player.pos # Gets the player X,Y coordinates on the board
+            self.board[pi, pj] = 0 # Changed from 3 to 0
+                                   # 0 means, no piece is currently occupying that space
+            self.player.pos = string2pos(pos) # Gets the string (AlgoNotation) and covernts it into X,Y to change piece position
+            pi, pj = self.player.pos                # Get the piece's current position
+            self.board[pi, pj] = self.nplayer       # Place it on the ASCII board
+
+            ### We need to add a check logic -- Sorasit (9/23)
+
+    def show(self):
+
+        print('\n' + '\n'.join(['  1 2 3 4 5 6 7 8'] +                # Prints out column headers
+              ['ABCDEFGH'[k] + 
+               ' ' + ' '.join([['.', 'r', 'k', 'R', 'K'][self.board[k, i]] # Prints out each row starting
+               for i in range(self.board_size[0])])                   #
+               for k in range(self.board_size[1])] + ['']))           #
+
+
+    # Lose condition 
+    def lose(self):
+        return self.possible_moves() == []
+
+        ### Need to modify it to check for checkmate status
+
+    # For the AI
+    def scoring(self):
+        return -100 if (self.possible_moves() == []) else 0
+
+    # Check if the game is over
+    def is_over(self):
+        return self.lose()
+
+
+# Main
+if __name__ == "__main__":
+
+    from easyAI import AI_Player, Negamax, DictTT
+
+    ai_algo = Negamax(2, tt = table)     # Negamax algorithm (Variantion of the Min-max)
+                              # Refer to the easyAI manual for more information
+    import cProfile
+    
+    # Define the game
+    game = Chess([AI_Player(ai_algo), AI_Player(ai_algo)], (8, 8))
+    # Player 1 _______|        |          |        |         |
+    # AI1 Algo ________________|          |        |         |
+    # Player 2 ___________________________|        |         |
+    # AI2 Algo ____________________________________|         |
+    # Gamespace dimensions __________________________________|
+          
+    game.play(10) # Starts the game
+    #cProfile.run("game.play(1)") # play one move, stop the game, profile
+    print("player %d loses" % (game.nplayer))
