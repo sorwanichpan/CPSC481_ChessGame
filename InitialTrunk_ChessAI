@@ -16,12 +16,22 @@
 #                   -- Need a smart system.
 #                   -- Unnecessary things i worked on: lol
 #                   -- random king and room placements.
+# 9/26/14 (Stetzko) -- Added DictTT for transposition tables to speed it up
+#                   -- table = DictTT() to assign the transpostion tables
+#                   -- Changed the ai_algo = Negamax(11) to 
+#                      ai_algo = Negamax(2, tt = table) to speed up the game
+#                      the 2 represents how many moves it will check ahead and
+#                      for some reason if you go higher than 2 it will not work.
+#                   -- In the possible moves method I added a comment that will
+#                      help us better understand our logic on the AI
+#                   -- Also added the other two positions just for the output of
+#                      the board
 # 9/29/14 (Sorasit) -- Added the Rook piece into the game space
 #
 #########################################################################
 
 import numpy as np
-from easyAI import TwoPlayersGame, AI_Player, Negamax
+from easyAI import TwoPlayersGame, AI_Player, Negamax, DictTT
 from random import randint, shuffle
 import math as m
 import time
@@ -59,6 +69,8 @@ ROOKD = list(map(np.array, [[3,0], [-3,0] ,[-3,0], [0,3]]))
 # functions to convert "D8" into (3,7) and back...
 pos2string = lambda ab: "ABCDEFGH"[ab[0]] + str(ab[1] + 1)
 string2pos = lambda s: np.array(["ABCDEFGH".index(s[0]), int(s[1])-1])
+
+table = DictTT()
 
 ### Note this is a derivative of the Knight example given in the easyAI module
 ### Knight is replaced with the king, with the respective valid movement rules
@@ -127,6 +139,10 @@ class Chess(TwoPlayersGame):
 
         # Random player starts
         self.nplayer = randint(1,2) 
+
+
+    def ttentry(self):
+        return str(self.board)
 
     def possible_moves(self):
         # Whose turn is it?
@@ -238,9 +254,10 @@ class Chess(TwoPlayersGame):
 # Main
 if __name__ == "__main__":
 
-    ai_algo = Negamax(5)     # Negamax algorithm (Variantion of the Min-max)
+    #ai_algo = Negamax(2)     # Negamax algorithm (Variantion of the Min-max)
                              # Refer to the easyAI manual for more information
     
+    ai_algo = Negamax(2, tt = table) 
     # Define the game
     # game = Chess([AI_Player(ai_algo), AI_Player(ai_algo)], (8, 8))
     game = Chess([AI_Player(ai_algo), AI_Player(ai_algo)], (8, 8)) # I added an extra player just to have the rook. it currently does nothing
