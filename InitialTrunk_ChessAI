@@ -3,8 +3,8 @@
 #########################################################################
 # CPSC 481: Assignment 1
 # Date: 9/22/14
-# Authors: 	Sorasit Wanichpan (ADD YOUR NAMES)
-#			Scott Blomquist
+# Authors:  Sorasit Wanichpan (ADD YOUR NAMES)
+#           Scott Blomquist
 # Changelog:
 # 9/22/14 (Sorasit) -- Added ASCII Chessboard (Visual Representation)
 #                   -- Added King valid movement rules
@@ -38,12 +38,23 @@
 #                   -- Changed the game max from 1000 to 10 for debugging
 # 
 # 10/3/2014(Scott B)-- Changed the how the black kings position was defined to: 'player[1].pos[0]' 
-#					   to be consistent with the white pieces name structure (makes it simpler to access either players king piece)
-#					-- Implemented kingInCheck() function that returns a bool value based on current piece positions on the board
-#					-- Added an enumeration class to label pieces more easily
-#					-- Cleaned up some commenting
-#					-- Put check conditions into the make_move and possible_move functions
-#					-- added print() statements to tell the user if the game was ended through stalemateor through checkmate.
+#                      to be consistent with the white pieces name structure (makes it simpler to access either players king piece)
+#                   -- Implemented kingInCheck() function that returns a bool value based on current piece positions on the board
+#                   -- Added an enumeration class to label pieces more easily
+#                   -- Cleaned up some commenting
+#                   -- Put check conditions into the make_move and possible_move functions
+#                   -- added print() statements to tell the user if the game was ended through stalemateor through checkmate.
+# 10/3/2014(Sorasit) -- Started work on Rook movement
+#                    --     The rook can now move horizontally or vertically as intended
+#                    --     Rook no longer kamakizes off the baord
+#                    --     Split the possible Rook moves into two categories (For column and Rows respectively)
+#                    --     Added a checking loop that looks for any piece within that row or column (Currently not working)
+#                    -- Added the unicode piece representation
+#                    -- Reoriented the chessboard (nothing should be affected, just a visual representation)
+#                    -- Added OS module, every time a new move is made, the screen will clear then print out a new board
+#                    --     Check the show module
+#                    --     Also added sleep(1) so I can sanely watch the game being played
+#                    -- TODO: Make the rook look for the shortest possible way to check the king (based off shortest distance formula)
 #########################################################################
 
 import numpy as np
@@ -52,12 +63,17 @@ from random import randint, shuffle
 from enum import Enum
 import math as m
 import time
+import os
 
 # Enums:
 class Piece(Enum):
-	whiteKing = 1
-	blackKing = 2
-	whiteRook = 3
+    whiteKing = 1
+    blackKing = 2
+    whiteRook = 3
+
+# TESTING ROOK
+""" Turn this to false if you want to test King """ 
+TESTINGROOK = False
 
 # Valid movement rules
 # Directions in which a piece can move on the game space
@@ -65,8 +81,8 @@ class Piece(Enum):
 # All valid moves, access array[0] and [1] respectively for [X,Y]
 
 ################################################################################
-# 	King Movement 
-# 		-Coordinates on the 2D gamespace 
+#   King Movement 
+#       -Coordinates on the 2D gamespace 
 #
 #                  [0,1]            
 #           [-1,1]       [1,1]
@@ -76,12 +92,15 @@ class Piece(Enum):
 #
 ################################################################################
 
+"""Updated graphical representation"""    
 KINGD = list(map(np.array, [[1, 0], [1, -1], [0, -1], [-1, -1],
                             [-1, 0], [-1, 1], [0, 1], [1, 1]]))
+KINGW = u'\u2654'
+KINGB = u'\u265A'
 
 ################################################################################
-# 	Rook Movement 
-# 		-Coordinates on the 2D gamespace
+#   Rook Movement 
+#       -Coordinates on the 2D gamespace
 #
 #                  [0,7]            
 #
@@ -91,21 +110,28 @@ KINGD = list(map(np.array, [[1, 0], [1, -1], [0, -1], [-1, -1],
 #
 ################################################################################
 
+"""Updated graphical representation"""    
 ROOKD = list(map(np.array, [[0,7]]))
 
+# Assign unicode for the Rook piece (White)
+ROOKW = u'\u2656'
+
+################################################################################
+
+"""Fixed Chessboard orientation"""  
 # lambda functions to convert "D8" into (3,7) and back...
-pos2string = lambda ab: "ABCDEFGH"[ab[0]] + str(ab[1] + 1)
-string2pos = lambda s: np.array(["ABCDEFGH".index(s[0]), int(s[1])-1])
+pos2string = lambda ab: "ABCDEFGH"[ab[1]] + str(ab[0] + 1)
+string2pos = lambda s: np.array([int(s[1])-1, "ABCDEFGH".index(s[0])])
 #table = DictTT()
 
 ################################################################################
 # Class: Chess
 # Purpose: Houses the logic and structure to successfult play a constrained 
-# 			game of chess using only one white king and rook, and one black king
+#           game of chess using only one white king and rook, and one black king
 ################################################################################
 class Chess(TwoPlayersGame):
 
-################################################################################	
+################################################################################    
 # __init__ : Intialization of main elements
 # PLEASE READ THE EASYAI DOCUMENTATION FIRST
 ################################################################################
@@ -114,115 +140,246 @@ class Chess(TwoPlayersGame):
         # self.depth = depth
         # self.tt = tt
         # self.win_score= win_score
-		
-		# Assign players to this instance of the class
+        
+        # Assign players to this instance of the class
         self.players = players
         
         # Set board size attribute      
         self.board_size = board_size
-		# Initialize the board to empty spaces
+        # Initialize the board to empty spaces
         self.board = np.zeros(board_size, dtype = int)        
               
-		# Set the pieces in their initial positions on the board
+        # Set the pieces in their initial positions on the board
         self.board[7, 4] = Piece.whiteKing # Instant win (1 move)
         self.board[7, 7] = Piece.whiteRook
         self.board[0, 3] = Piece.blackKing        
 
         # Assign players piece positions to their respective objects
-		# player[0] = p1
-		# player[1] = p2
+        # player[0] = p1
+        # player[1] = p2
         # pos[0] = King
         # pos[1] = Rook
         players[0].pos = ["", ""]
-		players[1].pos = [""]
+        players[1].pos = [""]
         players[0].pos[0] = np.array([7, 4]) # Instant win (1 move)
         players[0].pos[1] = np.array([7, 7])
-		players[1].pos[0] = np.array([0, 3)
+        players[1].pos[0] = np.array([0, 3])
         
         # player 1 (white) starts
         self.nplayer = 1 
 
 ################################################################################
 # possible_moves : returns an array of possible moves for a piece
-################################################################################	
+################################################################################    
     def possible_moves(self):
         # Whose turn is it?
         # Define each color's "rules"
         # Example: if player 1 = black, then we can define valid moves for each chess piece or to determine if the King is in Check.
         # nplayer: Which player is currently playing
         if self.nplayer == 1:
+
             # Set current p1 king and rook positions
             startWhiteKing = self.players[0].pos[0] #white King
             startWhiteRook = self.players[0].pos[1] #white Rook
-			
-			# Set the current position of the black king as target of move
+            
+            # Set the current position of the black king as target of move
             target = self.players[1].pos[0] #black king
-		
+        
             # Spaces that is acquired by the target
             # If the start chess piece (white king) goes into 1 space near the black king, it will die.
             # Best for the white king to avoid the black king by 1 space.
-            DANGERSPOT = [target] + [ target + a for a in KINGD]         
-            
+            DANGERSPOT = [target] + [ target + a for a in KINGD]
+  
+            """ KING PIECE """
             # Calculating all the king's movement at this section
             kingPossible  = [startWhiteKing + a for a in KINGD] #Calculating king's movement without any restrictions
-# Test print to see kings possible moves
-			print(kingPossible)
-			
-            # This is the generation of all the rook movements to be used for the implementation of the actual working
-            # Rook piece
-            rookPossible = [[startWhiteRook[0], i] + [i, startWhiteRook[1]] for i in range(8)]
-# Test print to see rooks possible moves
-            print(rookPossible)
-
             # This elimnates off-board and occupied positions
-            possible2 = [ a for a in kingPossible if (a[0]*a[1]>= 0) and (a[0] < 8) and (a[1] < 8) and (self.board[a[0], a[1]] == 0)]
-            # Minimum Board values ______________________|               |               |                       |
-            # Max Board values___________________________________________|_______________|                       |
-            # Empty space on the board___________________________________________________________________________|
+            possible2 = [ a for a in kingPossible if (a[0] >= 0) and (a[1] >= 0) and (a[0] < 8) and (a[1] < 8) and (self.board[a[0], a[1]] == 0)]
+            # # Minimum Board values ______________________|_______________|               |               |                       |
+            # # Max Board values___________________________________________________________|_______________|                       |
+            # # Empty space on the board___________________________________________________________________________________________|
 
-            # This section is a bit weird, but trust me. The numpy-arrays are complicated to delete and append elements.
-            # Here's  how i broke it down:
-            # ------------------------------------------------------------------------------
-            # Create an empty array so that I can store indices that are not valid
+            # # This section is a bit weird, but trust me. The numpy-arrays are complicated to delete and append elements.
+            # # Here's  how i broke it down:
+            # # ------------------------------------------------------------------------------
+            # # Create an empty array so that I can store indices that are not valid
             index_d=[]
 
-            # Create an array that holds the maximum indices
-            indexer=range(len(possible2))
+            # # Create an array that holds the maximum indices
+            indexerK=range(len(possible2))
 
-            # Counter
-            i=0
+            # # Counter
+            i=0 # King
 
-            # Saving all the index numbers that have a match in DANGERSPOT into index_d
+            # # Saving all the index numbers that have a match in DANGERSPOT into index_d
             for a in possible2:
                 for b in DANGERSPOT:
                     if np.array_equal(a,b):
                         index_d.append(i)
                 i = i + 1
 
-            # Remove index_d from indexer. Indexer now has all the index numbers that we want to keep.
+            # # Remove index_d from indexer. Indexer now has all the index numbers that we want to keep.
             if len(index_d) is not 0:
                 for a in index_d:
-                    indexer.remove(a)
+                    indexerK.remove(a)
 
-            # Variables 'valids' now hold all valid and safe positions
-            valids= [ possible2[a] for a in indexer ]
+            # # Variables 'valids' now hold all valid and safe positions
+            validsK= [ possible2[a] for a in indexerK ]
+
+            """ ROOK PIECE """
+            # This is the generation of all the rook movements to be used for the implementation of the actual working
+            # Rook piece (Y == Rows, X == Cols)
+            rookPossibleY = [[startWhiteRook[0], i]  for i in range(8)]
+            rookPossibleX = [[i, startWhiteRook[1]] for i in range(8)]
+            # Spaces that will place the enemy King into Check
+            TARGETSPOTY = target[0] # Target on Y, check range of X (For any thing in the way)
+            TARGETSPOTX = target[1] # Target on X, check range of Y (For any thing in the way)
+
+            ALLYBLOCKINGY = startWhiteKing[0]
+            ALLYBLOCKINGX = startWhiteKing[1]
+
+            # This elimnates off-board and occupied positions
+            # Locks Rook into only moving either horizontally or vertically only.
+            # possibleY and possibleX will be merged @ the end after all the constraints are applied
+            """Possible Move for Y""" 
+            rook_possible2Y = [ a for a in rookPossibleY if (a[0] >= 0) and (a[1] >= 0) and (a[0] < 8) and (a[1] < 8) and (self.board[a[0], a[1]] == 0)]
+            # Minimum Board values ______________________|_______________|               |               |                       |
+            # Max Board values___________________________________________________________|_______________|                       |
+            # Empty space on the board___________________________________________________________________________________________|
+
+            # This elimnates off-board and occupied positions
+            """Possible Move for X""" 
+            rook_possible2X = [ a for a in rookPossibleX if (a[0] >= 0) and (a[1] >= 0) and (a[0] < 8) and (a[1] < 8) and (self.board[a[0], a[1]] == 0)]
+            # Minimum Board values ______________________|_______________|               |               |                       |
+            # Max Board values___________________________________________________________|_______________|                       |
+            # Empty space on the board___________________________________________________________________________________________|
+
+            """ If Y (Rows) Coor match with the target, scan the columns """
+            # Scan and check if there are occupying pieces, make sure Rook doesn't jump over the piece
+            if startWhiteRook[0] == TARGETSPOTY:
+                ### If the Rook is at the end of the board
+                ### Read from the beginning of that row to (excluding the Rook) where the Rook is
+                if startWhiteRook[1] == 7:
+                    for i in range(0, startWhiteRook[1]):
+                        if (self.board[startWhiteRook[0], i] != 0):
+                        # -------------------------- need to add
+                            a = '1' # Filler
+                        ### Remove the possible move from the list of possible moves
+                        # -------------------------- need to add
+                ### Everything else
+                ### Read from the current position of the rook (Excluding the rook)
+                else:
+                    for i in range(startWhiteRook[1] + 1, 8):
+                        if (self.board[startWhiteRook[0], i] != 0):
+                        # -------------------------- need to add
+                            a = '1' # Filler  
+                        ### Remove the possible move from the list of possible moves
+                        # -------------------------- need to add
+
+            # Saving all the index numbers that have a match in DANGERSPOT into index_d
+            # This eliminates the rook occupying any of the DANGERZONE              
+            index_t=[]
+            # Create an array that holds the maximum indices
+            indexerR=range(len(rook_possible2Y))
+            # Counter
+            t=0 # Rook
+            for a in rook_possible2Y:
+                for b in DANGERSPOT:
+                    if np.array_equal(a,b):
+                        index_t.append(t)
+                t = t + 1
+
+            # Remove index_d from indexer. Indexer now has all the index numbers that we want to keep.
+            if len(index_t) is not 0:
+                for a in index_t:
+                    indexerR.remove(a)
+            validRY = [ rook_possible2Y[a] for a in indexerR ] 
+
+            """ If X (Columns) Coors match with the target, scan the rows """
+            # Scan and check if there are occupying pieces, make sure Rook doesn't jump over the piece
+            if startWhiteRook[1] == TARGETSPOTX:
+                if startWhiteRook[0] == 7:
+                    for i in range(0, startWhiteRook[0]):
+                        if (self.board[i, startWhiteRook[1]] != 0):
+                        # -------------------------- need to add
+                            a = '1' # Filler
+                        ### Remove the possible move from the list of possible moves
+                        # -------------------------- need to add
+                else:
+                    for i in range(startWhiteRook[0] + 1, 8):
+                        if (self.board[i, startWhiteRook[1]] != 0):
+                        # -------------------------- need to add
+                            a = '1' # Filler
+                        ### Remove the possible move from the list of possible moves
+                        # -------------------------- need to add
+
+            # Saving all the index numbers that have a match in DANGERSPOT into index_d
+            # This eliminates the rook occupying any of the DANGERZONE              
+            index_t=[]
+            # Create an array that holds the maximum indices
+            indexerR=range(len(rook_possible2X))
+            # Counter
+            t=0 # Rook
+            for a in rook_possible2X:
+                for b in DANGERSPOT:
+                    if np.array_equal(a,b):
+                        index_t.append(t)
+                t = t + 1
+            # Remove index_d from indexer. Indexer now has all the index numbers that we want to keep.
+            if len(index_t) is not 0:
+                for a in index_t:
+                    indexerR.remove(a)
+            validRX = [ rook_possible2X[a] for a in indexerR ]  
+
+            # Merge the two Rook valid possible moves
+            validsR = validRX + validRY
+
 
             # Algorithm for the white king to get close to the black king by using distance formula
             # ------------------------------------------------------------------------------------
-            # Make sure that we DO have positions that we can go too.
-            if len(valids) > 0:
-                close = valids[0]
-                mini = m.sqrt(m.pow(close[0]-target[0],2) + m.pow(close[1]-target[1],2))
-                for d in valids:
-                    mini2 = m.sqrt(m.pow(d[0]-target[0],2) + m.pow(d[1]-target[1],2))
-                    if mini2<mini:
-                        mini=mini2
-                        close=d
-                return[pos2string(close)]
-            # Return empty array when we have no more valid positions to move.
+            # Make sure that we DO have positions that we can go too. 
+            """ Need to modify for Check (Stop the Rook from zerging in on the king, we just want to use it to force a check or checkmate) """ 
+            ##### ROOK ######
+            if (TESTINGROOK is True):
+                if len(validsR) > 0:
+                    closeR = validsR[0]
+                    miniR = m.sqrt(m.pow(closeR[0]-target[0],2) + m.pow(closeR[1]-target[1],2))
+                    for d in validsR:
+                        mini2R = m.sqrt(m.pow(d[0]-target[0],2) + m.pow(d[1]-target[1],2))
+                        if mini2R<miniR:
+                            miniR=mini2R
+                            closeR=d
+                    return[pos2string(closeR)]
+                else:
+                    # Return empty array when we have no more valid positions to move.
+                    print("Stalemate!")
+                    return[]
+            ##### KING ######
             else:
-				print("Stalemate!")
-                return[]
+                if len(validsK) > 0:
+                    closeK = validsK[0]
+                    miniK = m.sqrt(m.pow(closeK[0]-target[0],2) + m.pow(closeK[1]-target[1],2))
+                    for d in validsK:
+                        mini2K = m.sqrt(m.pow(d[0]-target[0],2) + m.pow(d[1]-target[1],2))
+                        if mini2K<miniK:
+                            miniK=mini2K
+                            closeK=d
+                    return[pos2string(closeK)]
+                else:
+                    # Return empty array when we have no more valid positions to move.
+                    print("Stalemate!")
+                    return[]
+
+            """ Original """    
+            # if len(validsR) > 0:
+            #     close = validsK[0]
+            #     mini = m.sqrt(m.pow(close[0]-target[0],2) + m.pow(close[1]-target[1],2))
+            #     for d in validsR:
+            #         mini2 = m.sqrt(m.pow(d[0]-target[0],2) + m.pow(d[1]-target[1],2))
+            #         if mini2<mini:
+            #             mini=mini2
+            #             close=d
+            #     return[pos2string(close)]
 
         elif self.nplayer == 2:
             # Finding the intial position of the pieces on the board
@@ -232,17 +389,16 @@ class Chess(TwoPlayersGame):
             # Spaces that is acquired by the target
             # If the start chess piece (Black king) goes into 1 space near the white king, it will die.
             # Best for the black king to avoid the white king by 1 space.
-            DANGERSPOT = [target] + [ target + a for a in KINGD]         
-            
+            DANGERSPOT = [target] + [ target + a for a in KINGD]          
 
             #### Calculating all the king's movement at this section
             kingPossible  = [start + a for a in KINGD] #Calculating king's movement without any restrictions
 
             # This elimnates off-board and occupied positions
-            possible2 = [ a for a in kingPossible if (a[0]*a[1]>= 0) and (a[0] < 8) and (a[1] < 8) and (self.board[a[0], a[1]] == 0)]
-            # Minimum Board values ______________________|               |               |                       |
-            # Max Board values___________________________________________|_______________|                       |
-            # Empty space on the board___________________________________________________________________________|
+            possible2 = [ a for a in kingPossible if (a[0] >= 0) and (a[1]>= 0) and (a[0] < 8) and (a[1] < 8) and (self.board[a[0], a[1]] == 0)]
+            # Minimum Board values ______________________|_______________|               |               |                       |
+            # Max Board values___________________________________________________________|_______________|                       |
+            # Empty space on the board___________________________________________________________________________________________|
 
             # This section is a bit weird, but trust me. The numpy-arrays are complicated to delete and append elements.
             # Here's  how i broke it down:
@@ -270,43 +426,53 @@ class Chess(TwoPlayersGame):
 
             # Variables 'valids' now hold all valid and safe positions
             valids= [ possible2[a] for a in indexer ]
-			
-			# Check to see if the valid moves would put the black king in check
-			# If it does it removes that move from the valid list
-			for v in valids:
-				currentPos = self.player[1].pos[0]
-				make_move(v)
-				if kingInCheck() == True:
-					valids.remove(v)
-				make_move(currentPos)
-				
+            
+            # Check to see if the valid moves would put the black king in check
+            # If it does it removes that move from the valid list
+            #for v in valids:
+            #    currentPos = self.player[1].pos[0]
+            #    make_move(v)
+            #    if kingInCheck() == True:
+            #        valids.remove(v)
+            #    make_move(currentPos)
+                
             # Black king will move randomly into safe spots.
             if len(valids) > 0:
                 close = valids[randint(0,len(valids)-1)]
                 return[pos2string(close)]
             # Return empty array when we have no more valid positions to move.
             else:
-				print("Checkmate!")
+                print("Checkmate!")
                 return[]                
                        
 ################################################################################
 # make_move : Moves a piece based on passed position
-################################################################################					   
+################################################################################                       
     def make_move(self, pos):
         if self.nplayer == 1:
 
-            ### THIS PRINTS OUT KING[0]
-            # After negmax finds the "best" choice, make the move
-            pi, pj = self.player.pos[0] # Gets the player X,Y coordinates on the board
-            self.board[pi, pj] = 0 # Changed from 3 to 0
-                                   # 0 means, no piece is currently occupying that space
-            self.player.pos[0] = string2pos(pos) # Gets the string (AlgoNotation) and covernts it into X,Y to change piece position
-            pi, pj = self.player.pos[0]                # Get the piece's current position
-            self.board[pi, pj] = self.nplayer       # Place it on the ASCII board 
+            ### THIS PRINTS OUT KING
+            if (TESTINGROOK is False):
+                # After negmax finds the "best" choice, make the move
+                pi, pj = self.player.pos[0] # Gets the player X,Y coordinates on the board
+                self.board[pi, pj] = 0 # Changed from 3 to 0
+                                       # 0 means, no piece is currently occupying that space
+                self.player.pos[0] = string2pos(pos) # Gets the string (AlgoNotation) and covernts it into X,Y to change piece position
+                pi, pj = self.player.pos[0]                # Get the piece's current position
+                self.board[pi, pj] = Piece.whiteKing       # Place it on the ASCII board 
+            ### THIS PRINTS OUT THE ROOK
+            elif (TESTINGROOK is True):
+                # After negmax finds the "best" choice, make the move
+                pi, pj = self.player.pos[1] # Gets the player X,Y coordinates on the board
+                self.board[pi, pj] = 0 # Changed from 3 to 0
+                                       # 0 means, no piece is currently occupying that space
+                self.player.pos[1] = string2pos(pos) # Gets the string (AlgoNotation) and covernts it into X,Y to change piece position
+                pi, pj = self.player.pos[1]                # Get the piece's current position
+                self.board[pi, pj] = Piece.whiteRook       # Place it on the ASCII board 
 
-			# See if move put the king in check.
-			if kingInCheck == True:
-				print("Black King in check")
+            # See if move put the king in check.
+            #if kingInCheck == True:
+            #   print("Black King in check")
 
         elif self.nplayer == 2:
             # After negmax finds the "best" choice, make the move
@@ -315,11 +481,11 @@ class Chess(TwoPlayersGame):
                                    # 0 means, no piece is currently occupying that space
             self.player.pos[0] = string2pos(pos) # Gets the string (AlgoNotation) and covernts it into X,Y to change piece position
             pi, pj = self.player.pos[0]                # Get the piece's current position
-            self.board[pi, pj] = self.nplayer       # Place it on the ASCII board
+            self.board[pi, pj] = Piece.blackKing       # Place it on the ASCII board
             
             ### We need to add a check logic -- Sorasit (9/23)
 
-################################################################################			
+################################################################################            
 # kingInCheck :
 # This function looks at the king(s) position relative to the other teams piece positions and 
 # returns 'TRUE' if the king is in check, and 'FALSE' if the king is safe from a check condition.
@@ -328,27 +494,29 @@ class Chess(TwoPlayersGame):
 # - Call while a Kings best move is being determined and before that move is executed to enusre
 # that the move does not put the king in a self imposed check scenario. 
 ################################################################################
-	def kingInCheck(self):
-		# Commented out since I did not have time to test it thouroughly yet as I am at work
-		# blackKingPos = self.player[1].pos[0]
-		# whiteKingPos = self.player[0].pos[0]
-		# whiteRookPos = self.player[0].pos[1]
-		# blackKingPossible  = [blackKingPos + a for a in KINGD]
-		# if whiteRookPos[0] == blackKingPos[0] or whiteRookPos[1] == blackKingPos[1]:
-		#	return True;
-		# elif whiteKingPos in blackKingPossible:
-		#	return True
-		# else 
-		#	return False		
-		
+    """Code Block""" 
+    #def kingInCheck(self):
+        # Commented out since I did not have time to test it thouroughly yet as I am at work
+        # blackKingPos = self.player[1].pos[0]
+        # whiteKingPos = self.player[0].pos[0]
+        # whiteRookPos = self.player[0].pos[1]
+        # blackKingPossible  = [blackKingPos + a for a in KINGD]
+        # if whiteRookPos[0] == blackKingPos[0] or whiteRookPos[1] == blackKingPos[1]:
+        #   return True;
+        # elif whiteKingPos in blackKingPossible:
+        #   return True
+        # else 
+        #   return False        
+        
 ################################################################################
 # show : prints the board
-################################################################################			
+################################################################################            
     def show(self):
-        print('\n' + '\n'.join(['  1 2 3 4 5 6 7 8'] + ['ABCDEFGH'[k] +  ' ' + ' '.join([['.', 'W', 'B', 'R'][self.board[k, i]] 
+        print('\n' + '\n'.join(['  A B C D E F G H'] + ['12345678'[k] +  ' ' + ' '.join([['.', KINGW, KINGB, ROOKW][self.board[k, i]] 
             for i in range(self.board_size[0])])
             for k in range(self.board_size[1])] + ['']))
-        #time.sleep(2)
+        time.sleep(3)
+        os.system('clear')
 
 ################################################################################
 # lose : checks for lose condition 
@@ -356,14 +524,14 @@ class Chess(TwoPlayersGame):
     def lose(self):
         return self.possible_moves() == []
         ### Need to modify it to check for checkmate status
-		
+        
 ################################################################################
 # scoring: For the AI <-- expand??
 ################################################################################
     def scoring(self):
         return -100 if (self.possible_moves() == []) else 0
 
-################################################################################		
+################################################################################        
 # is_over : Check if the game is over
 ################################################################################
     def is_over(self):
@@ -371,7 +539,7 @@ class Chess(TwoPlayersGame):
 
 ################################################################################
 # __call__ : Calls the easy AI to make a best move based on current game state
-################################################################################		
+################################################################################        
     def __call__(self,game):
         """
         Returns the AI's best move given the current state of the game.
