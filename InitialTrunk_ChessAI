@@ -64,6 +64,8 @@ from enum import Enum
 import math as m
 import time
 import os
+import sys
+import argparse
 
 # Enums:
 class Piece(Enum):
@@ -140,7 +142,7 @@ class Chess(TwoPlayersGame):
         # self.depth = depth
         # self.tt = tt
         # self.win_score= win_score
-        
+
         # Assign players to this instance of the class
         self.players = players
         
@@ -551,13 +553,22 @@ class Chess(TwoPlayersGame):
                      -self.win_score, +self.win_score, self.tt)
         return game.ai_move
 
-################################################################################
-# Main
-################################################################################
-if __name__ == "__main__":
+def main(argv):
+    parser = argparse.ArgumentParser()
 
-    ai_algo = Negamax(20)     # Negamax algorithm (Variantion of the Min-max)
-                             # Refer to the easyAI manual for more information
+    parser.add_argument ("N_Turns", help="Determines the best move by thinking N turns in advance. (Default is 9)", type=int, default=9)
+    
+    # To be implemented further
+    parser.add_argument ("-v", "--verbose", help="Prints out the debugging information to screen", action="store_true", default=False)
+
+    # Grab the arguments
+    args = parser.parse_args()
+
+    # To be implemented further
+    verbose = args.verbose
+
+    ai_algo = Negamax(args.N_Turns)     # Negamax algorithm (Variantion of the Min-max)
+                                        # Refer to the easyAI manual for more information
     game = Chess([AI_Player(ai_algo), AI_Player(ai_algo)], (8, 8))  
     # Player 1 _______|        |          |        |         |
     # AI1 Algo ________________|          |        |         |
@@ -566,3 +577,12 @@ if __name__ == "__main__":
     # Gamespace dimensions __________________________________|     
     game.play(20) # Starts the game
     print("player %d loses" % (game.nplayer))
+
+################################################################################
+# Main
+################################################################################
+if __name__ == "__main__":
+
+    # Takes in command line arguments
+    main(sys.argv[1:])
+
