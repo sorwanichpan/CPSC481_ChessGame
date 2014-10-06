@@ -1,5 +1,19 @@
 #!/usr/bin/env python
 
+#########################################################################
+# CPSC 481: Assignment 1
+# Date: 9/22/14
+# Authors:  Sorasit Wanichpan (ADD YOUR NAMES)
+#           Scott Blomquist
+#           Scott Stetzko
+#           Henry Ngo
+#
+# This project uses modules under open sourced licenses
+#   easyAI -- MIT License (see LICENSES.txt)
+#   numpy -- numpy license (see LICENSES.txt)
+#
+#########################################################################
+
 import numpy as np
 from easyAI import TwoPlayersGame, AI_Player, Negamax, DictTT, id_solve, df_solve
 from random import randint, shuffle
@@ -18,7 +32,7 @@ class Piece(Enum):
 
 # TESTING ROOK
 """ Turn this to false if you want to test King """ 
-TESTINGROOK = False
+TESTINGROOK = True
 
 # Valid movement rules
 # Directions in which a piece can move on the game space
@@ -95,8 +109,8 @@ class Chess(TwoPlayersGame):
         self.board = np.zeros(board_size, dtype = int)        
               
         # Set the pieces in their initial positions on the board
-        self.board[7, 4] = Piece.whiteKing # Instant win (1 move)
-        self.board[7, 7] = Piece.whiteRook
+        self.board[7, 4] = Piece.whiteKing # Instant win (1 move) (7,4)
+        self.board[7, 7] = Piece.whiteRook # 7 7
         self.board[0, 3] = Piece.blackKing        
 
         # Assign players piece positions to their respective objects
@@ -172,55 +186,49 @@ class Chess(TwoPlayersGame):
             validsK= [ possible2[a] for a in indexerK ]
 
             """ ROOK PIECE """
-            # This is the generation of all the rook movements to be used for the implementation of the actual working
+            # Locks Rook into only moving either horizontally or vertically only.
+            # Split into two axis so we can check the rows and columns individually if there is a piece blocking
             # Rook piece (Y == Rows, X == Cols)
             rookPossibleY = [[startWhiteRook[0], i]  for i in range(8)]
             rookPossibleX = [[i, startWhiteRook[1]] for i in range(8)]
-            # Spaces that will place the enemy King into Check
-            TARGETSPOTY = target[0] # Target on Y, check range of X (For any thing in the way)
-            TARGETSPOTX = target[1] # Target on X, check range of Y (For any thing in the way)
-
-            ALLYBLOCKINGY = startWhiteKing[0]
-            ALLYBLOCKINGX = startWhiteKing[1]
-
+            
             # This elimnates off-board and occupied positions
-            # Locks Rook into only moving either horizontally or vertically only.
-            # possibleY and possibleX will be merged @ the end after all the constraints are applied
-            """Possible Move for Y""" 
+            """Possible moves for Rook on the Y axis (Rows)""" 
             rook_possible2Y = [ a for a in rookPossibleY if (a[0] >= 0) and (a[1] >= 0) and (a[0] < 8) and (a[1] < 8) and (self.board[a[0], a[1]] == 0)]
             # Minimum Board values ______________________|_______________|               |               |                       |
             # Max Board values___________________________________________________________|_______________|                       |
             # Empty space on the board___________________________________________________________________________________________|
 
             # This elimnates off-board and occupied positions
-            """Possible Move for X""" 
+            """Possible Move for Rook on the X axis (Columns)""" 
             rook_possible2X = [ a for a in rookPossibleX if (a[0] >= 0) and (a[1] >= 0) and (a[0] < 8) and (a[1] < 8) and (self.board[a[0], a[1]] == 0)]
             # Minimum Board values ______________________|_______________|               |               |                       |
             # Max Board values___________________________________________________________|_______________|                       |
             # Empty space on the board___________________________________________________________________________________________|
 
-            """ If Y (Rows) Coor match with the target, scan the columns """
-            # Scan and check if there are occupying pieces, make sure Rook doesn't jump over the piece
-            if startWhiteRook[0] == TARGETSPOTY:
-                ### If the Rook is at the end of the board
-                ### Read from the beginning of that row to (excluding the Rook) where the Rook is
-                if startWhiteRook[1] == 7:
-                    for i in range(0, startWhiteRook[1]):
-                        if (self.board[startWhiteRook[0], i] != 0):
-                        # -------------------------- need to add
-                            a = '1' # Filler
-                        ### Remove the possible move from the list of possible moves
-                        # -------------------------- need to add
-                ### Everything else
-                ### Read from the current position of the rook (Excluding the rook)
-                else:
-                    for i in range(startWhiteRook[1] + 1, 8):
-                        if (self.board[startWhiteRook[0], i] != 0):
-                        # -------------------------- need to add
-                            a = '1' # Filler  
-                        ### Remove the possible move from the list of possible moves
-                        # -------------------------- need to add
+            """ Scan the X axis (Columns) for obstructed moves"""
+            # Store the invalid moves (Moves that will have Rook jump over another piece)
+            badMoveCol = []
 
+            # Read the positions not occupied by the Rook
+            # From the beginning of the board (A) <---- ROOK ----> to the end of the board (H)
+            # Add the moves that is obstructed by a piece to the invalid list if there exists a piece that obstruct the Rook on that current row
+            for i in [x for x in range(0,8) if x is not startWhiteRook[1]+1]:
+                if (self.board[startWhiteRook[0], i] != 0):
+                    if startWhiteRook[1] < i:
+                        for val in range(i+1,7):
+                            badMoveCol.append([startWhiteRook[0], val])
+                    elif startWhiteRook[1] > i:
+                        for val in range(0,i):
+                            badMoveCol.append([startWhiteRook[0], val])
+
+            # Remove invalid moves from the list of possible moves (Rook can't jump over pieces)
+            for i in badMoveCol:
+                if i in rook_possible2Y:
+                    rook_possible2Y.remove(i)
+            """ rook_possible2Y now only contain unobstructed moves """
+
+            """ Check for the DANGERSPOTs """
             # Saving all the index numbers that have a match in DANGERSPOT into index_d
             # This eliminates the rook occupying any of the DANGERZONE              
             index_t=[]
@@ -233,31 +241,36 @@ class Chess(TwoPlayersGame):
                     if np.array_equal(a,b):
                         index_t.append(t)
                 t = t + 1
-
             # Remove index_d from indexer. Indexer now has all the index numbers that we want to keep.
             if len(index_t) is not 0:
                 for a in index_t:
                     indexerR.remove(a)
             validRY = [ rook_possible2Y[a] for a in indexerR ] 
+            """ validRY now contains all the valid column moves for the Rook """
 
-            """ If X (Columns) Coors match with the target, scan the rows """
-            # Scan and check if there are occupying pieces, make sure Rook doesn't jump over the piece
-            if startWhiteRook[1] == TARGETSPOTX:
-                if startWhiteRook[0] == 7:
-                    for i in range(0, startWhiteRook[0]):
-                        if (self.board[i, startWhiteRook[1]] != 0):
-                        # -------------------------- need to add
-                            a = '1' # Filler
-                        ### Remove the possible move from the list of possible moves
-                        # -------------------------- need to add
-                else:
-                    for i in range(startWhiteRook[0] + 1, 8):
-                        if (self.board[i, startWhiteRook[1]] != 0):
-                        # -------------------------- need to add
-                            a = '1' # Filler
-                        ### Remove the possible move from the list of possible moves
-                        # -------------------------- need to add
+            """ Scan the Y axis (Rows) for obstructed moves"""
+            # Store the invalid moves (Moves that will have Rook jump over another piece)
+            badMoveRow = []
 
+            # Read the positions not occupied by the Rook
+            # From the beginning of the board (1) <---- ROOK ----> to the end of the board (8)
+            # Add the moves that is obstructed by a piece to the invalid list if there exists a piece that obstruct the Rook on that current column
+            for i in [x for x in range(0,8) if x is not startWhiteRook[0]+1]:
+                if (self.board[i, startWhiteRook[1]] != 0):
+                    if startWhiteRook[0] < i:
+                        for val in range(i+1,7):
+                            badMoveRow.append([val, startWhiteRook[1]])
+                    elif startWhiteRook[0] > i:
+                        for val in range(0,i):
+                            badMoveRow.append([val, startWhiteRook[1]])
+
+            # Remove invalid moves from the list of possible moves (Rook can't jump over pieces)
+            for i in badMoveRow:
+                if i in rook_possible2X:
+                    rook_possible2X.remove(i)
+            """ rook_possible2X now only contain unobstructed moves """
+
+            """ Check for the DANGERSPOTs """
             # Saving all the index numbers that have a match in DANGERSPOT into index_d
             # This eliminates the rook occupying any of the DANGERZONE              
             index_t=[]
@@ -274,11 +287,11 @@ class Chess(TwoPlayersGame):
             if len(index_t) is not 0:
                 for a in index_t:
                     indexerR.remove(a)
-            validRX = [ rook_possible2X[a] for a in indexerR ]  
+            validRX = [ rook_possible2X[a] for a in indexerR ]
+            """ validRX now contains all the valid row moves for the Rook """  
 
             # Merge the two Rook valid possible moves
             validsR = validRX + validRY
-
 
             # Algorithm for the white king to get close to the black king by using distance formula
             # ------------------------------------------------------------------------------------
@@ -314,17 +327,6 @@ class Chess(TwoPlayersGame):
                     # Return empty array when we have no more valid positions to move.
                     print("Stalemate!")
                     return[]
-
-            """ Original """    
-            # if len(validsR) > 0:
-            #     close = validsK[0]
-            #     mini = m.sqrt(m.pow(close[0]-target[0],2) + m.pow(close[1]-target[1],2))
-            #     for d in validsR:
-            #         mini2 = m.sqrt(m.pow(d[0]-target[0],2) + m.pow(d[1]-target[1],2))
-            #         if mini2<mini:
-            #             mini=mini2
-            #             close=d
-            #     return[pos2string(close)]
 
         elif self.nplayer == 2:
             # Finding the intial position of the pieces on the board
@@ -395,7 +397,6 @@ class Chess(TwoPlayersGame):
 ################################################################################                       
     def make_move(self, pos):
         if self.nplayer == 1:
-
             ### THIS PRINTS OUT KING
             if (TESTINGROOK is False):
                 # After negmax finds the "best" choice, make the move
@@ -429,7 +430,7 @@ class Chess(TwoPlayersGame):
             self.board[pi, pj] = Piece.blackKing       # Place it on the ASCII board
             
             ### We need to add a check logic -- Sorasit (9/23)
-
+        
 ################################################################################            
 # kingInCheck :
 # This function looks at the king(s) position relative to the other teams piece positions and 
@@ -438,21 +439,21 @@ class Chess(TwoPlayersGame):
 # - Call after every move to check if that move put opponnents King in check.
 # - Call while a Kings best move is being determined and before that move is executed to enusre
 # that the move does not put the king in a self imposed check scenario. 
-################################################################################
-    """Code Block""" 
+################################################################################  
+
     #def kingInCheck(self):
         # Commented out since I did not have time to test it thouroughly yet as I am at work
-        # blackKingPos = self.player[1].pos[0]
-        # whiteKingPos = self.player[0].pos[0]
-        # whiteRookPos = self.player[0].pos[1]
-        # blackKingPossible  = [blackKingPos + a for a in KINGD]
-        # if whiteRookPos[0] == blackKingPos[0] or whiteRookPos[1] == blackKingPos[1]:
-        #   return True;
-        # elif whiteKingPos in blackKingPossible:
-        #   return True
-        # else 
-        #   return False        
-        
+        #blackKingPos = self.player[1].pos[0]
+        #whiteKingPos = self.player[0].pos[0]
+        #whiteRookPos = self.player[0].pos[1]
+        #blackKingPossible  = [blackKingPos + a for a in KINGD]
+        #if whiteRookPos[0] == blackKingPos[0] or whiteRookPos[1] == blackKingPos[1]:
+        #    return True;
+        #elif whiteKingPos in blackKingPossible:
+        #    return True
+        #else: 
+        #    return False      
+
 ################################################################################
 # show : prints the board
 ################################################################################            
@@ -500,15 +501,9 @@ def main(argv):
     parser = argparse.ArgumentParser()
 
     parser.add_argument ("N_Turns", help="Determines the best move by thinking N turns in advance. (Default is 9)", type=int, default=9)
-    
-    # To be implemented further
-    parser.add_argument ("-v", "--verbose", help="Prints out the debugging information to screen", action="store_true", default=False)
-
     # Grab the arguments
     args = parser.parse_args()
-
-    # To be implemented further
-    verbose = args.verbose
+    test_mode = args.T
 
     ai_algo = Negamax(args.N_Turns)     # Negamax algorithm (Variantion of the Min-max)
                                         # Refer to the easyAI manual for more information
@@ -525,7 +520,6 @@ def main(argv):
 # Main
 ################################################################################
 if __name__ == "__main__":
-
     # Takes in command line arguments
     main(sys.argv[1:])
 
